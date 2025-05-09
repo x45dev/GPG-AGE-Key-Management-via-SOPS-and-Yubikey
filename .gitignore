@@ -1,0 +1,7 @@
+secrets/*.yaml
+backups/
+.env
+.envrc
+.gpg-agent-info
+*.swp
+*.asc

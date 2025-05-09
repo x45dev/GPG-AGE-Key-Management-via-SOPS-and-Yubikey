@@ -1,0 +1,2 @@
+[tasks.doctor]
+run = "scripts/tools/validate-config.sh"
