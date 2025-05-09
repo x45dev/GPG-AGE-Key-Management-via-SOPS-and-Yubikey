@@ -1,7 +1,11 @@
-secrets/*.yaml
+# DENY
 backups/
+keys/
+secrets/*.yaml
 .env
-.envrc
 .gpg-agent-info
 *.swp
 *.asc
+
+# ALLOW
+!secrets/.env.sops.yaml

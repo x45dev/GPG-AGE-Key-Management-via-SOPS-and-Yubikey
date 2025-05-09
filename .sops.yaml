@@ -1,3 +1,3 @@
 creation_rules:
-  - path_regex: 'secrets/.*\.yaml'
-    age: []
+  - path_regex: 'secrets/.env.sops.yaml'
+    age: age1pgrh2e2ws4dfc3y2x9pz72f80lrwmfnnvewr55hr4jktsvafsfns7kdm0v

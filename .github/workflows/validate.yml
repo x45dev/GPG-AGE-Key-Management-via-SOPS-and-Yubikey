@@ -1,7 +1,31 @@
 name: Validate
-on: [push]
+
+on:
+  push:
+  pull_request:
+
 jobs:
-  lint:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: ShellCheck all scripts
+        run: shellcheck $(find scripts -name '*.sh')
+
+      - name: YAML lint
+        run: |
+          pip install yamllint
+          yamllint .
+
+      - name: Format check
+        run: |
+          sudo apt-get install shfmt -y
+          shfmt -d -i 2 -ci scripts
+
+      - name: Run environment check
+        run: |
+          curl https://mise.run | sh
+          mise trust
+          mise install
+          mise run checkup

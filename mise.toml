@@ -1,2 +1,45 @@
-[tasks.doctor]
+# .mise.toml - Manage development tools, environment, and tasks
+
+# --- Environment Variables ---
+# Declare multiple '_.file' directives by wrapping them in an array ([[env]]).
+[[env]]
+_.file = ".env.tracked"
+[[env]]
+_.file = "secrets/.env.sops.yaml"
+
+
+# --- Tools ---
+# Pin tool versions for reproducible environments
+[tools]
+age = "1.2.1"
+age-plugin-yubikey = "0.5.0"
+sops = "3.10.2"
+
+# --- Tasks ---
+[tasks.checkup]
 run = "scripts/tools/validate-config.sh"
+
+[tasks.generate-age-keypair]
+description = "Generate AGE keypair if not already present."
+run = 'bash ./scripts/core/01-generate-age-keypair.sh'
+depends = ["checkup"]
+
+[tasks.generate-gpg-keypair]
+description = "Generate GPG keypair if not already present."
+run = 'bash ./scripts/core/01-generate-gpg-master-key.sh'
+depends = ["checkup"]
+
+[tasks.edit-encrypt]
+description = "Edit the encrypted secrets env file using SOPS via EDITOR."
+run = 'sops edit secrets/.env.sops.yaml'
+alias = ["edit"]
+
+[tasks.encrypt]
+description = "Encrypt the secrets env file using SOPS."
+run = 'sops encrypt --in-place secrets/.env.sops.yaml'
+alias = ["e"]
+
+[tasks.decrypt]
+description = "DEBUG ONLY: Decrypt secrets file to stdout."
+run = 'sops decrypt secrets/.env.sops.yaml'
+alias = ["d"]
