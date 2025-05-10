@@ -1,6 +1,6 @@
-# YubiKey Key Management Automation
+# Key Management Automation - GPG and/or AGE via SOPS and Yubikey
 
-This project provides a suite of idempotent Bash scripts, orchestrated by Mise, to automate the secure management of GPG and AGE cryptographic keys using YubiKeys. It aims to establish a robust, repeatable, and user-friendly system for individuals and teams to protect sensitive data, ensure authentication integrity, and maintain operational security.
+This project provides a suite of idempotent Bash scripts, orchestrated by Mise, to automate the secure management of GPG and AGE cryptographic keys, including optionally using YubiKeys. It aims to establish a robust, repeatable, and user-friendly system for individuals and teams to protect sensitive data, ensure authentication integrity, and maintain operational security.
 
 The methodology emphasizes:
 - **Hardware-backed GPG Keys:** Storing GPG subkeys on a YubiKey's OpenPGP applet, with the master key kept securely offline.
