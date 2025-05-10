@@ -1,45 +1,309 @@
 # .mise.toml - Manage development tools, environment, and tasks
 
 # --- Environment Variables ---
-# Declare multiple '_.file' directives by wrapping them in an array ([[env]]).
+# Load environment variables from these files.
+# Variables defined directly in [env] below will take precedence if also defined in these files,
+# unless the file-loaded variable is explicitly set in the shell environment.
 [[env]]
 _.file = ".env.tracked"
 [[env]]
 _.file = "secrets/.env.sops.yaml"
 
+# Define project-specific environment variables with defaults.
+# These can be overridden by shell environment or .env files (if not already loaded by _.file above and taking precedence).
+[[env]]
+# Default User Specifics for GPG (Full name for GPG key User ID)
+GPG_USER_NAME = "Your Name"
+# Email address for GPG key User ID
+GPG_USER_EMAIL = "your.email@example.com"
+# Optional comment for GPG key User ID
+GPG_KEY_COMMENT = "YubiKey Managed Key"
+# GPG key type: RSA4096 or ED25519. Used for new keys and subkeys.
+GPG_KEY_TYPE = "RSA4096"
+# GPG key expiration period (e.g., 1y, 2y). Used for new keys and subkeys.
+GPG_EXPIRATION = "2y"
+# File to store the generated GPG Master Key ID (relative to project root)
+GPG_MASTER_KEY_ID_FILE = ".gpg_master_key_id"
+# Recommended minimum passphrase length for GPG master key
+GPG_MIN_PASSPHRASE_LENGTH = "12"
+# Reason code for GPG revocation certificate (0=No reason, 1=Compromised, 2=Superseded, 3=No longer used)
+GPG_REVOCATION_REASON = "0"
+# Directory name for GPG master key backups (relative to project root)
+GPG_BACKUP_DIR_NAME = "gpg_master_key_backup"
+# Threshold in days for checking GPG key expiration
+GPG_EXPIRY_CHECK_THRESHOLD_DAYS = "30"
+# Which subkeys to rotate: all, sign, encrypt, auth (comma-separated for multiple specific)
+GPG_SUBKEY_ROTATION_CHOICE = "all"
+
+# YubiKey Serials (get from 'ykman list --serials')
+# Serial number of the primary YubiKey
+PRIMARY_YUBIKEY_SERIAL = ""
+# Serial number of the backup YubiKey (optional)
+BACKUP_YUBIKEY_SERIAL = ""
+
+# GPG Touch Policies (on, off, fixed, cached)
+# Touch policy for GPG Signature key on YubiKey
+GPG_TOUCH_POLICY_SIG = "cached"
+# Touch policy for GPG Encryption key on YubiKey
+GPG_TOUCH_POLICY_ENC = "cached"
+# Touch policy for GPG Authentication key on YubiKey
+GPG_TOUCH_POLICY_AUT = "cached"
+
+# OpenPGP Applet PIN Policies (YubiKey enforces its own minimums, these are for prompts)
+# Recommended minimum length for YubiKey OpenPGP User PIN
+OPENPGP_MIN_USER_PIN_LENGTH = "6"
+# Recommended minimum length for YubiKey OpenPGP Admin PIN
+OPENPGP_MIN_ADMIN_PIN_LENGTH = "8"
+
+# AGE Configuration for Primary YubiKey
+# PIV slot for AGE key on primary YubiKey (e.g., 9a, 9c, 9d, 9e, 82-95)
+AGE_PRIMARY_YUBIKEY_PIV_SLOT = "9a"
+# Path to save AGE identity file for primary YubiKey
+AGE_PRIMARY_YUBIKEY_IDENTITY_FILE = "~/.config/sops/age/yubikey_primary_id.txt"
+# PIV PIN policy for AGE key on primary YubiKey (once, always, never)
+AGE_PRIMARY_YUBIKEY_PIN_POLICY = "once"
+# PIV touch policy for AGE key on primary YubiKey (cached, always, never)
+AGE_PRIMARY_YUBIKEY_TOUCH_POLICY = "cached"
+
+# AGE Configuration for Backup YubiKey
+# PIV slot for AGE key on backup YubiKey
+AGE_BACKUP_YUBIKEY_PIV_SLOT = "9a"
+# Path to save AGE identity file for backup YubiKey
+AGE_BACKUP_YUBIKEY_IDENTITY_FILE = "~/.config/sops/age/yubikey_backup_id.txt"
+# PIV PIN policy for AGE key on backup YubiKey
+AGE_BACKUP_YUBIKEY_PIN_POLICY = "once"
+# PIV touch policy for AGE key on backup YubiKey
+AGE_BACKUP_YUBIKEY_TOUCH_POLICY = "cached"
+
+# PIV Credential Policies
+# Minimum length for YubiKey PIV PIN
+PIV_MIN_PIN_LENGTH = "6"
+# Minimum length for YubiKey PIV PUK
+PIV_MIN_PUK_LENGTH = "8"
+# PIV Management Key is fixed at 48 hex characters by YubiKey spec.
+
+# Software AGE Key Configuration
+# Directory for software-based AGE keys (relative to project root)
+AGE_SOFTWARE_KEY_DIR = "keys"
+# Filename for the primary software AGE key
+AGE_SOFTWARE_KEY_FILENAME = "age-keys-primary.txt"
+# Recommended minimum passphrase length for encrypting software AGE key
+AGE_SOFTWARE_KEY_MIN_PASSPHRASE_LENGTH = "12"
+
+# Backup & Restore Configuration
+# Comma-separated list of items to back up (tilde expanded, relative to project root if not absolute)
+BACKUP_SOURCE_ITEMS = "~/.gnupg, ~/.config/sops/age, .sops.yaml, keys, project.conf, .env.tracked, secrets/.env.sops.yaml, {{env.GPG_MASTER_KEY_ID_FILE}}, {{env.TEMP_GNUPGHOME_DIR_NAME}}"
+# File containing AGE public keys for backup encryption (relative to project root)
+BACKUP_AGE_RECIPIENTS_FILE = "age-recipients.txt"
+# Comma-separated AGE public keys (overrides file)
+BACKUP_AGE_RECIPIENTS = ""
+# Directory for encrypted backups (relative to project root)
+BACKUP_OUTPUT_DIR = "backups"
+# Prefix for backup archive filenames
+BACKUP_ARCHIVE_PREFIX = "key-materials-backup"
+# Directory to extract restored backup files (relative to project root)
+RESTORE_OUTPUT_DIR = "restored_backup_files"
+# Path to AGE identity file for decrypting backups (defaults to SOPS_AGE_KEY_FILE if set, otherwise prompts or uses age defaults)
+RESTORE_AGE_IDENTITY_FILE = "${SOPS_AGE_KEY_FILE}"
+# Default SOPS file to test decryption during offline verification
+OFFLINE_VERIFY_SOPS_FILE = "secrets/example.yaml"
+
+# Additional AGE Identity Configuration (for scripts/team/08-*)
+# Serial for additional YubiKey AGE identity (if different from primary/backup)
+ADDITIONAL_AGE_YUBIKEY_SERIAL = ""
+# PIV slot for additional AGE identity (e.g., 9a, 9c, 9d, 9e, 82-95)
+ADDITIONAL_AGE_PIV_SLOT = "9c"
+# Template for additional AGE identity file path. {{label}} and {{serial}} will be replaced.
+ADDITIONAL_AGE_IDENTITY_FILE_PATH_TEMPLATE = "~/.config/sops/age/yubikey_{{label}}_{{serial}}.txt"
+# PIV PIN policy for additional AGE key (once, always, never)
+ADDITIONAL_AGE_PIN_POLICY = "once"
+# PIV touch policy for additional AGE key (cached, always, never)
+ADDITIONAL_AGE_TOUCH_POLICY = "cached"
+# File to append new AGE public keys to (relative to project root)
+ADDITIONAL_AGE_RECIPIENTS_FILE = "age-recipients.txt"
+
+# SOPS Configuration Update Script
+# Input file containing AGE public keys (one per line, comments/labels ignored, relative to project root)
+SOPS_AGE_RECIPIENTS_INPUT_FILE = "age-recipients.txt"
+# Path to the .sops.yaml configuration file (relative to project root)
+SOPS_CONFIG_FILE_PATH = ".sops.yaml"
+
+# SOPS Rekey Script
+# Default comma-separated glob patterns for SOPS rekey script (relative to project root)
+SOPS_REKEY_DEFAULT_PATHS = "secrets/**/*.yaml,secrets/**/*.json"
+
+# Redact Secrets Script
+# Default comma-separated glob patterns for redact script (relative to project root)
+REDACT_DEFAULT_SOURCE_PATHS = "secrets/**/*.yaml,secrets/**/*.json,*.env.tracked"
+# Default output directory for redacted files (relative to project root)
+REDACT_OUTPUT_DIR_NAME = "redacted_output"
+
+# Audit Secrets Script
+# Default comma-separated glob patterns for SOPS audit script (relative to project root)
+AUDIT_SOPS_DEFAULT_PATHS = "secrets/**/*.yaml,secrets/**/*.json,*.env.tracked"
+# Optional AGE identity file for decryption check during audit (defaults to RESTORE_AGE_IDENTITY_FILE)
+AUDIT_SOPS_AGE_IDENTITY_FILE = "${RESTORE_AGE_IDENTITY_FILE}"
+
+# Logging Configuration
+# Path to a file for detailed logging. If empty, no file logging. Example: /tmp/ykm.log or ykm.log for project root.
+YKM_LOG_FILE = ""
+
+# SOPS Configuration
+# By default, use the primary YubiKey's AGE identity if it exists.
+# This can be a comma-separated list if multiple keys are used.
+# The SOPS_AGE_KEY_FILE from .env.tracked might override this if explicitly set.
+SOPS_AGE_KEY_FILE = "${AGE_PRIMARY_YUBIKEY_IDENTITY_FILE}"
+
+# Temporary GNUPGHOME for key generation to avoid conflicts with existing user GPG setup
+TEMP_GNUPGHOME_DIR_NAME = ".gnupghome_temp_ykm" # Relative to project root, made more unique
 
 # --- Tools ---
 # Pin tool versions for reproducible environments
 [tools]
-age = "1.2.1"
-age-plugin-yubikey = "0.5.0"
-sops = "3.10.2"
+#gpg = "latest"              # For GPG operations. Install via OS package manager.
+ykman = "latest"             # For YubiKey configuration
+age = "1.2.1"                # For AGE key management
+age-plugin-yubikey = "0.5.0" # For AGE YubiKey integration
+sops = "3.10.2"              # For SOPS file encryption/decryption
+hopenpgp-tools = "latest"    # For GPG key linting (hokey)
+shellcheck = "latest"        # For linting Bash scripts
+
+# For Linux systems, ensure and gpg pcscd is installed and running via your system's package manager.
+# e.g., on Debian/Ubuntu: sudo apt install gpg2 pcscd pcsc-tools libccid
+# e.g., on Arch Linux: sudo pacman -Syu gpg2 pcsc-tools ccid
 
 # --- Tasks ---
 [tasks.checkup]
-run = "scripts/tools/validate-config.sh"
+description = "Validate project configuration files and essential environment variables."
+run = "./scripts/tools/validate-config.sh"
+alias = ["validate-config"]
 
-[tasks.generate-age-keypair]
-description = "Generate AGE keypair if not already present."
-run = 'bash ./scripts/core/01-generate-age-keypair.sh'
+# Core YubiKey & Key Management Tasks
+[tasks.generate-gpg-keys]
+description = "Generate new GPG master key, subkeys, and revocation certificate."
+depends = ["checkup"]
+run = "./scripts/core/01-generate-gpg-master-key.sh"
+
+[tasks.generate-software-age-key]
+description = "Generate a new software-based AGE keypair and encrypt the private key."
+run = "./scripts/core/01-generate-age-keypair.sh"
+depends = ["checkup"] # Basic checks still useful
+
+[tasks.provision-primary-gpg-yubikey]
+description = "Provision primary YubiKey with GPG subkeys."
+run = "./scripts/core/02-provision-gpg-yubikey.sh --serial {{env.PRIMARY_YUBIKEY_SERIAL}}"
+depends = ["checkup", "generate-gpg-keys"]
+
+[tasks.backup-gpg-master-key]
+description = "Guide secure backup of GPG master key."
+run = "./scripts/core/03-backup-gpg-master-key.sh"
+depends = ["generate-gpg-keys"]
+
+[tasks.create-backup]
+description = "Create an encrypted backup of key materials and configuration."
+run = "./scripts/core/06-create-encrypted-backup.sh"
+depends = ["generate-gpg-keys"] # Ensure key ID file exists if it's part of backup items
+
+[tasks.provision-primary-age-yubikey]
+description = "Provision primary YubiKey with an AGE identity (using YubiKey PIV)."
+run = "./scripts/core/04-provision-age-yubikey.sh --serial {{env.PRIMARY_YUBIKEY_SERIAL}} --slot {{env.AGE_PRIMARY_YUBIKEY_PIV_SLOT}} --output {{env.AGE_PRIMARY_YUBIKEY_IDENTITY_FILE}} --pin-policy {{env.AGE_PRIMARY_YUBIKEY_PIN_POLICY}} --touch-policy {{env.AGE_PRIMARY_YUBIKEY_TOUCH_POLICY}}"
 depends = ["checkup"]
 
-[tasks.generate-gpg-keypair]
-description = "Generate GPG keypair if not already present."
-run = 'bash ./scripts/core/01-generate-gpg-master-key.sh'
+[tasks.clone-gpg-to-backup-yubikey]
+description = "Provision backup YubiKey with the same GPG subkeys as the primary."
+run = "./scripts/core/05-clone-gpg-yubikey.sh --serial {{env.BACKUP_YUBIKEY_SERIAL}}"
+depends = ["checkup", "generate-gpg-keys"]
+
+[tasks.provision-backup-age-yubikey]
+description = "Provision backup YubiKey with a new AGE identity (using YubiKey PIV)."
+run = "./scripts/core/04-provision-age-yubikey.sh --serial {{env.BACKUP_YUBIKEY_SERIAL}} --slot {{env.AGE_BACKUP_YUBIKEY_PIV_SLOT}} --output {{env.AGE_BACKUP_YUBIKEY_IDENTITY_FILE}} --pin-policy {{env.AGE_BACKUP_YUBIKEY_PIN_POLICY}} --touch-policy {{env.AGE_BACKUP_YUBIKEY_TOUCH_POLICY}}"
+
+[tasks.restore-backup]
+description = "Decrypt and restore an encrypted backup archive."
+run = "./scripts/core/07-restore-backup.sh {{arg(name='backup_file', required=true, help='Path to the .tar.gz.age encrypted backup file')}}"
+usage = "mise restore-backup <path_to_encrypted_backup_file.tar.gz.age>"
+
+[tasks.provision-additional-age-identity]
+description = "Provision an additional YubiKey with a new AGE identity (assumes PIV applet is already set up)."
+run = "./scripts/team/08-provision-additional-age-identity.sh --label {{arg(name='label', help='A label for this identity (e.g., team-member-name)', required=true)}} --serial {{env.ADDITIONAL_AGE_YUBIKEY_SERIAL}} --slot {{env.ADDITIONAL_AGE_PIV_SLOT}} --pin-policy {{env.ADDITIONAL_AGE_PIN_POLICY}} --touch-policy {{env.ADDITIONAL_AGE_TOUCH_POLICY}} --recipients-file {{env.ADDITIONAL_AGE_RECIPIENTS_FILE}} {{arg(name='output_file', help='Optional: Full path for the identity file (overrides template based on label/serial)')}}"
+depends = ["checkup"]
+usage = "mise provision-additional-age-identity <label> [--serial <yk_serial>] [--slot <piv_slot>] [--output_file <path>] ..."
+
+[tasks.update-sops-config-age]
+description = "Update .sops.yaml with AGE recipients from a specified file."
+run = "./scripts/team/09-update-sops-recipients.sh"
+usage = "mise update-sops-config-age [--input-file <path>] [--sops-file <path>]" # Actual args handled by script
+
+[tasks.check-expiring-gpg-keys]
+description = "Check for GPG keys expiring within a specified threshold (default 30 days)."
+run = "./scripts/tools/10-check-expiring-keys.sh {{arg(name='days', help='Number of days for expiration threshold')}}"
+usage = "mise check-expiring-gpg-keys [days]"
+
+[tasks.rekey-sops-secrets]
+description = "Re-encrypt SOPS files with current .sops.yaml recipients."
+run = "./scripts/tools/11-rekey-sops-secrets.sh {{args}}" # Pass all extra args to the script
+usage = "mise rekey-sops-secrets [--dry-run] [--backup] [file_or_dir ...]"
+
+[tasks.rotate-gpg-subkeys]
+description = "Rotate GPG subkeys (generate new ones, expire/revoke old ones)."
+run = "./scripts/core/12-rotate-gpg-subkeys.sh {{arg(name='key_id', help='Optional GPG Master Key ID to operate on. Defaults to ID from .gpg_master_key_id file.')}}"
+usage = "mise rotate-gpg-subkeys [key_id]"
+depends = ["generate-gpg-keys"] # Implies master key should exist
+
+[tasks.generate-gpg-on-yubikey]
+description = "OPTIONAL & ADVANCED: Generate GPG keys directly ON a YubiKey (NON-BACKABLE private keys)."
+run = "./scripts/core/16-generate-gpg-on-yubikey.sh --serial {{env.PRIMARY_YUBIKEY_SERIAL}}"
+usage = "mise generate-gpg-on-yubikey [--serial <yubikey_serial>]"
 depends = ["checkup"]
 
-[tasks.edit-encrypt]
-description = "Edit the encrypted secrets env file using SOPS via EDITOR."
-run = 'sops edit secrets/.env.sops.yaml'
+[tasks.setup-age-yubikey-redundancy]
+description = "Guide setup of a second YubiKey for AGE redundancy and update SOPS config."
+run = "./scripts/team/17-setup-age-yubikey-redundancy.sh"
+depends = ["checkup", "provision-primary-age-yubikey"] # Assumes primary is already set up
+
+[tasks.offline-verify-secrets]
+description = "Attempt to decrypt a sample SOPS secret to verify AGE/GPG key accessibility (e.g., YubiKey)."
+run = "./scripts/tools/13-offline-verify.sh {{arg(name='sops_file', help='Path to SOPS file to test decryption against')}} {{arg(name='identity_file', help='Optional path to AGE identity file')}}"
+usage = "mise offline-verify-secrets [sops_file_to_test] [age_identity_file]"
+
+[tasks.redact-secrets]
+description = "Create visually redacted copies of specified files."
+run = "./scripts/tools/14-redact-secrets.sh {{args}}" # Pass all extra args to the script
+usage = "mise redact-secrets [--output-dir <path>] [file_or_dir ...]"
+
+[tasks.audit-sops-secrets]
+description = "Audit SOPS files for metadata and optional decryptability."
+run = "./scripts/tools/15-audit-secrets.sh {{args}}" # Pass all extra args to the script
+usage = "mise audit-sops-secrets [--decrypt-check] [file_or_dir ...]"
+
+
+# SOPS related tasks (keeping existing ones, ensuring they use project env)
+[tasks.sops-edit-env]
+description = "Edit the encrypted secrets env file (secrets/.env.sops.yaml) using SOPS via EDITOR."
+run = 'sops edit secrets/.env.sops.yaml' # Kept existing target file
+alias = ["edit-env"]
+
+[tasks.sops-encrypt-env]
+description = "Encrypt the secrets env file (secrets/.env.sops.yaml) using SOPS."
+run = 'sops encrypt --in-place secrets/.env.sops.yaml' # Kept existing target file
+alias = ["encrypt-env"]
+
+[tasks.sops-decrypt-env]
+description = "DEBUG ONLY: Decrypt secrets env file (secrets/.env.sops.yaml) to stdout."
+run = 'sops decrypt secrets/.env.sops.yaml' # Kept existing target file
+alias = ["decrypt-env"]
+
+[tasks.sops-edit]
+description = "Edit an arbitrary encrypted SOPS file (e.g., secrets/some-other.enc.yaml)."
+usage = "mise sops-edit <file_path>"
+run = "sops {{arg(name='file', required=true)}}"
 alias = ["edit"]
 
-[tasks.encrypt]
-description = "Encrypt the secrets env file using SOPS."
-run = 'sops encrypt --in-place secrets/.env.sops.yaml'
-alias = ["e"]
+# Utility Tasks
+[tasks.lint-scripts]
+description = "Lint all Bash scripts with shellcheck."
+run = "shellcheck ./scripts/**/*.sh" # Adjusted glob to include subdirectories
 
-[tasks.decrypt]
-description = "DEBUG ONLY: Decrypt secrets file to stdout."
-run = 'sops decrypt secrets/.env.sops.yaml'
-alias = ["d"]
+[tasks.clean-temp-gpg]
+description = "Remove the temporary GPG home directory used for key generation."
+run = "rm -rf {{env.TEMP_GNUPGHOME_DIR_NAME}}"
