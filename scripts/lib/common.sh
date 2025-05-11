@@ -85,7 +85,12 @@ _log_to_file() {
 
     if [ "$_YKM_LOG_FILE_IS_WRITABLE" -eq 1 ]; then
         # Format: YYYY-MM-DD HH:MM:SS [LEVEL] SCRIPT_NAME: Message
-        printf "%s [%s] %s: %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "${level}" "${SCRIPT_NAME}" "${message}" >> "$YKM_LOG_FILE"
+        if ! printf "%s [%s] %s: %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "${level}" "${SCRIPT_NAME}" "${message}" >> "$YKM_LOG_FILE"; then
+            # This echo goes to stderr, won't use logging functions to avoid recursion if logging itself is the problem.
+            echo "CRITICAL_LOG_FAILURE: Failed to write to log file ${YKM_LOG_FILE} for message: [${level}] ${message}" >&2
+            # Optionally, disable further file logging attempts if one fails catastrophically
+            # _YKM_LOG_FILE_IS_WRITABLE=0
+        fi
     fi
 }
 
@@ -242,4 +247,3 @@ trap 'common_cleanup_handler $?' EXIT
 if [ -n "$YKM_LOG_FILE" ]; then
     _log_to_file "INIT" "Common library initialized. Attempting to start file logging."
 fi
-
