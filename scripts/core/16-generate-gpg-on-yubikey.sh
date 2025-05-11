@@ -6,14 +6,14 @@
 SHELL_OPTIONS="set -e -u -o pipefail"
 eval "$SHELL_OPTIONS"
 
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LIB_SCRIPT_PATH="${BASE_DIR}/scripts/lib/common.sh"
 
 if [ ! -f "$LIB_SCRIPT_PATH" ]; then
     echo "Error: common.sh not found at $LIB_SCRIPT_PATH"
     exit 1
 fi
-# shellcheck source=scripts/lib/common.sh
+# shellcheck source=../lib/common.sh
 source "$LIB_SCRIPT_PATH"
 
 # --- Usage Function ---

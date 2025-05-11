@@ -1,176 +1,31 @@
 # .mise.toml - Manage development tools, environment, and tasks
 
 # --- Environment Variables ---
-# Load environment variables from these files.
-# Variables defined directly in [env] below will take precedence if also defined in these files,
-# unless the file-loaded variable is explicitly set in the shell environment.
+# Define project-specific environment variables with default values in .env.tracked.
+# Variables defined directly in [[env]] below will take precedence if also defined in these files,
+#   unless the file-loaded variable is explicitly set in the shell environment.
 [[env]]
-_.file = ".env.tracked"
+_.file = ".env.tracked"            # Default environment variables for the project.
 [[env]]
-_.file = "secrets/.env.sops.yaml"
-
-# Define project-specific environment variables with defaults.
-# These can be overridden by shell environment or .env files (if not already loaded by _.file above and taking precedence).
-[[env]]
-# Default User Specifics for GPG (Full name for GPG key User ID)
-GPG_USER_NAME = "Your Name"
-# Email address for GPG key User ID
-GPG_USER_EMAIL = "your.email@example.com"
-# Optional comment for GPG key User ID
-GPG_KEY_COMMENT = "YubiKey Managed Key"
-# GPG key type: RSA4096 or ED25519. Used for new keys and subkeys.
-GPG_KEY_TYPE = "RSA4096"
-# GPG key expiration period (e.g., 1y, 2y). Used for new keys and subkeys.
-GPG_EXPIRATION = "2y"
-# File to store the generated GPG Master Key ID (relative to project root)
-GPG_MASTER_KEY_ID_FILE = ".gpg_master_key_id"
-# Recommended minimum passphrase length for GPG master key
-GPG_MIN_PASSPHRASE_LENGTH = "12"
-# Reason code for GPG revocation certificate (0=No reason, 1=Compromised, 2=Superseded, 3=No longer used)
-GPG_REVOCATION_REASON = "0"
-# Directory name for GPG master key backups (relative to project root)
-GPG_BACKUP_DIR_NAME = "gpg_master_key_backup"
-# Threshold in days for checking GPG key expiration
-GPG_EXPIRY_CHECK_THRESHOLD_DAYS = "30"
-# Which subkeys to rotate: all, sign, encrypt, auth (comma-separated for multiple specific)
-GPG_SUBKEY_ROTATION_CHOICE = "all"
-
-# YubiKey Serials (get from 'ykman list --serials')
-# Serial number of the primary YubiKey
-PRIMARY_YUBIKEY_SERIAL = ""
-# Serial number of the backup YubiKey (optional)
-BACKUP_YUBIKEY_SERIAL = ""
-
-# GPG Touch Policies (on, off, fixed, cached)
-# Touch policy for GPG Signature key on YubiKey
-GPG_TOUCH_POLICY_SIG = "cached"
-# Touch policy for GPG Encryption key on YubiKey
-GPG_TOUCH_POLICY_ENC = "cached"
-# Touch policy for GPG Authentication key on YubiKey
-GPG_TOUCH_POLICY_AUT = "cached"
-
-# OpenPGP Applet PIN Policies (YubiKey enforces its own minimums, these are for prompts)
-# Recommended minimum length for YubiKey OpenPGP User PIN
-OPENPGP_MIN_USER_PIN_LENGTH = "6"
-# Recommended minimum length for YubiKey OpenPGP Admin PIN
-OPENPGP_MIN_ADMIN_PIN_LENGTH = "8"
-
-# AGE Configuration for Primary YubiKey
-# PIV slot for AGE key on primary YubiKey (e.g., 9a, 9c, 9d, 9e, 82-95)
-AGE_PRIMARY_YUBIKEY_PIV_SLOT = "9a"
-# Path to save AGE identity file for primary YubiKey
-AGE_PRIMARY_YUBIKEY_IDENTITY_FILE = "~/.config/sops/age/yubikey_primary_id.txt"
-# PIV PIN policy for AGE key on primary YubiKey (once, always, never)
-AGE_PRIMARY_YUBIKEY_PIN_POLICY = "once"
-# PIV touch policy for AGE key on primary YubiKey (cached, always, never)
-AGE_PRIMARY_YUBIKEY_TOUCH_POLICY = "cached"
-
-# AGE Configuration for Backup YubiKey
-# PIV slot for AGE key on backup YubiKey
-AGE_BACKUP_YUBIKEY_PIV_SLOT = "9a"
-# Path to save AGE identity file for backup YubiKey
-AGE_BACKUP_YUBIKEY_IDENTITY_FILE = "~/.config/sops/age/yubikey_backup_id.txt"
-# PIV PIN policy for AGE key on backup YubiKey
-AGE_BACKUP_YUBIKEY_PIN_POLICY = "once"
-# PIV touch policy for AGE key on backup YubiKey
-AGE_BACKUP_YUBIKEY_TOUCH_POLICY = "cached"
-
-# PIV Credential Policies
-# Minimum length for YubiKey PIV PIN
-PIV_MIN_PIN_LENGTH = "6"
-# Minimum length for YubiKey PIV PUK
-PIV_MIN_PUK_LENGTH = "8"
-# PIV Management Key is fixed at 48 hex characters by YubiKey spec.
-
-# Software AGE Key Configuration
-# Directory for software-based AGE keys (relative to project root)
-AGE_SOFTWARE_KEY_DIR = "keys"
-# Filename for the primary software AGE key
-AGE_SOFTWARE_KEY_FILENAME = "age-keys-primary.txt"
-# Recommended minimum passphrase length for encrypting software AGE key
-AGE_SOFTWARE_KEY_MIN_PASSPHRASE_LENGTH = "12"
-
-# Backup & Restore Configuration
-# Comma-separated list of items to back up (tilde expanded, relative to project root if not absolute)
-BACKUP_SOURCE_ITEMS = "~/.gnupg, ~/.config/sops/age, .sops.yaml, keys, project.conf, .env.tracked, secrets/.env.sops.yaml, {{env.GPG_MASTER_KEY_ID_FILE}}, {{env.TEMP_GNUPGHOME_DIR_NAME}}"
-# File containing AGE public keys for backup encryption (relative to project root)
-BACKUP_AGE_RECIPIENTS_FILE = "age-recipients.txt"
-# Comma-separated AGE public keys (overrides file)
-BACKUP_AGE_RECIPIENTS = ""
-# Directory for encrypted backups (relative to project root)
-BACKUP_OUTPUT_DIR = "backups"
-# Prefix for backup archive filenames
-BACKUP_ARCHIVE_PREFIX = "key-materials-backup"
-# Directory to extract restored backup files (relative to project root)
-RESTORE_OUTPUT_DIR = "restored_backup_files"
-# Path to AGE identity file for decrypting backups (defaults to SOPS_AGE_KEY_FILE if set, otherwise prompts or uses age defaults)
-RESTORE_AGE_IDENTITY_FILE = "${SOPS_AGE_KEY_FILE}"
-# Default SOPS file to test decryption during offline verification
-OFFLINE_VERIFY_SOPS_FILE = "secrets/example.yaml"
-
-# Additional AGE Identity Configuration (for scripts/team/08-*)
-# Serial for additional YubiKey AGE identity (if different from primary/backup)
-ADDITIONAL_AGE_YUBIKEY_SERIAL = ""
-# PIV slot for additional AGE identity (e.g., 9a, 9c, 9d, 9e, 82-95)
-ADDITIONAL_AGE_PIV_SLOT = "9c"
-# Template for additional AGE identity file path. {{label}} and {{serial}} will be replaced.
-ADDITIONAL_AGE_IDENTITY_FILE_PATH_TEMPLATE = "~/.config/sops/age/yubikey_{{label}}_{{serial}}.txt"
-# PIV PIN policy for additional AGE key (once, always, never)
-ADDITIONAL_AGE_PIN_POLICY = "once"
-# PIV touch policy for additional AGE key (cached, always, never)
-ADDITIONAL_AGE_TOUCH_POLICY = "cached"
-# File to append new AGE public keys to (relative to project root)
-ADDITIONAL_AGE_RECIPIENTS_FILE = "age-recipients.txt"
-
-# SOPS Configuration Update Script
-# Input file containing AGE public keys (one per line, comments/labels ignored, relative to project root)
-SOPS_AGE_RECIPIENTS_INPUT_FILE = "age-recipients.txt"
-# Path to the .sops.yaml configuration file (relative to project root)
-SOPS_CONFIG_FILE_PATH = ".sops.yaml"
-
-# SOPS Rekey Script
-# Default comma-separated glob patterns for SOPS rekey script (relative to project root)
-SOPS_REKEY_DEFAULT_PATHS = "secrets/**/*.yaml,secrets/**/*.json"
-
-# Redact Secrets Script
-# Default comma-separated glob patterns for redact script (relative to project root)
-REDACT_DEFAULT_SOURCE_PATHS = "secrets/**/*.yaml,secrets/**/*.json,*.env.tracked"
-# Default output directory for redacted files (relative to project root)
-REDACT_OUTPUT_DIR_NAME = "redacted_output"
-
-# Audit Secrets Script
-# Default comma-separated glob patterns for SOPS audit script (relative to project root)
-AUDIT_SOPS_DEFAULT_PATHS = "secrets/**/*.yaml,secrets/**/*.json,*.env.tracked"
-# Optional AGE identity file for decryption check during audit (defaults to RESTORE_AGE_IDENTITY_FILE)
-AUDIT_SOPS_AGE_IDENTITY_FILE = "${RESTORE_AGE_IDENTITY_FILE}"
-
-# Logging Configuration
-# Path to a file for detailed logging. If empty, no file logging. Example: /tmp/ykm.log or ykm.log for project root.
-YKM_LOG_FILE = ""
-
-# SOPS Configuration
-# By default, use the primary YubiKey's AGE identity if it exists.
-# This can be a comma-separated list if multiple keys are used.
-# The SOPS_AGE_KEY_FILE from .env.tracked might override this if explicitly set.
-SOPS_AGE_KEY_FILE = "${AGE_PRIMARY_YUBIKEY_IDENTITY_FILE}"
-
-# Temporary GNUPGHOME for key generation to avoid conflicts with existing user GPG setup
-TEMP_GNUPGHOME_DIR_NAME = ".gnupghome_temp_ykm" # Relative to project root, made more unique
+_.file = "secrets/.env.sops.yaml"  # Overrides default variables.
+[[env]]                            # Overrides any env vars previously set by env files.
+EDITOR = "emacs"
+LOG_LEVEL = "debug"
+YKM_LOG_FILE = "ykm.log"
 
 # --- Tools ---
-# Pin tool versions for reproducible environments
+# Pin tool versions for reproducible environments (latest as of 2025.05.11)
 [tools]
-#gpg = "latest"              # For GPG operations. Install via OS package manager.
-ykman = "latest"             # For YubiKey configuration
-age = "1.2.1"                # For AGE key management
-age-plugin-yubikey = "0.5.0" # For AGE YubiKey integration
-sops = "3.10.2"              # For SOPS file encryption/decryption
-hopenpgp-tools = "latest"    # For GPG key linting (hokey)
-shellcheck = "latest"        # For linting Bash scripts
+age = "1.2.1"                      # For AGE key management
+age-plugin-yubikey = "0.5.0"       # For AGE YubiKey integration
+#gpg                               # For GPG operations. Install via OS package manager.
+#hopenpgp-tools                    # For GPG key linting (hokey). Install via OS package manager.
+shellcheck = "latest"              # For linting Bash scripts
+sops = "3.10.2"                    # For SOPS file encryption/decryption
+#ykman                             # For YubiKey configuration. Install via OS package manager or Python Pip.
 
-# For Linux systems, ensure and gpg pcscd is installed and running via your system's package manager.
-# e.g., on Debian/Ubuntu: sudo apt install gpg2 pcscd pcsc-tools libccid
-# e.g., on Arch Linux: sudo pacman -Syu gpg2 pcsc-tools ccid
+# Ensure that gpg, hopenpgp-tools, pcscd, and ykman are installed and running via your system's package manager.
+# e.g., on Debian/Ubuntu: sudo apt install gpg2 hopenpgp-tools pcscd pcsc-tools libccid yubikey-manager
 
 # --- Tasks ---
 [tasks.checkup]

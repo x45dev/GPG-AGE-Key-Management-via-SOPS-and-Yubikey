@@ -5,7 +5,6 @@
 SHELL_OPTIONS="set -e -u -o pipefail" # Keep pipefail for robustness in checks
 eval "$SHELL_OPTIONS"
 
-# Correctly determine BASE_DIR relative to this script's location
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LIB_SCRIPT_PATH="${BASE_DIR}/scripts/lib/common.sh"
 
@@ -94,7 +93,6 @@ else
     log_info "  YKM_LOG_FILE (for file logging): Not set (file logging disabled)."
 fi
 
-echo # Newline for readability
 if [ $VALIDATION_ERRORS -gt 0 ]; then
     log_error "Configuration validation failed with ${VALIDATION_ERRORS} critical error(s)."
     exit 1

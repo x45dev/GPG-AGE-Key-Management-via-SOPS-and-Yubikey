@@ -11,14 +11,14 @@ SHELL_OPTIONS="set -e -u -o pipefail"
 # set -o pipefail: The return value of a pipeline is the status of the last command to exit with a non-zero status, or zero if no command exited with a non-zero status.
 eval "$SHELL_OPTIONS"
 
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LIB_SCRIPT_PATH="${BASE_DIR}/scripts/lib/common.sh"
 
 if [ ! -f "$LIB_SCRIPT_PATH" ]; then
     echo "Error: common.sh not found at $LIB_SCRIPT_PATH"
     exit 1
 fi
-# shellcheck source=scripts/lib/common.sh
+# shellcheck source=../lib/common.sh
 # Load common library functions (logging, prompts, etc.)
 source "$LIB_SCRIPT_PATH"
 

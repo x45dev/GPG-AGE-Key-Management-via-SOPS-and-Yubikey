@@ -31,20 +31,29 @@ Refer to docs/Yubikey-Key-Management-Automation.md for the detailed comprehensiv
 
 ### 2. Software
 
-The following command-line tools are required. They will be managed by Mise if you use the provided `.mise.toml` configuration.
+The following command-line tools are required.
 
-- **Mise:** For tool version management and task execution. Install from mise.jdx.dev.
-- **GnuPG (gpg):** For OpenPGP operations.
-  *Note: `gpg` should be installed via your system's package manager (e.g., `apt`, `brew`, `pacman`). It is not managed by Mise.
-- **YubiKey Manager (ykman):** For configuring YubiKey applets.
+- **Mise:** For tool version management and task execution.  
+  Install from [mise.jdx.dev](https://mise.jdx.dev/):  
+  - `curl https://mise.run | sh`
+- **GnuPG (gpg):** For OpenPGP operations.  
+  Install via OS package manager; eg:  
+  - `sudo apt install gpg2`
+- **YubiKey Manager CLI (ykman):** For configuring YubiKey applets. Note: Yubikey *Manager* for CLI; Yubikey *Authenticator* 6.0+ for GUI.  
+  Install via OS package manager; eg:  
+  - Debian/Ubuntu: `sudo add-apt-repository ppa:yubico/stable && sudo apt-get update && sudo apt install yubikey-manager && ykman --version`
+- **hopenpgp-tools (hokey):** For linting GPG keys (optional but recommended).  
+  Install via OS package manager; eg:  
+  - Debian/Ubuntu: `sudo apt install hopenpgp-tools`
+- **pcsc-tools, ccid, libusb-compat (Linux):** System libraries for smart card interaction. `pcscd` daemon must be running.  
+  Install via OS package manager; eg:  
+  - Debian/Ubuntu: `sudo apt install pcscd pcsc-tools libccid`
+
+The following command-line tools will be installed and managed by Mise via the provided `.mise.toml` configuration.
+
 - **age:** For modern file encryption.
 - **age-plugin-yubikey:** Plugin for AGE to use YubiKey PIV applet.
-- **SOPS (sops):** For managing encrypted files.
-- **hopenpgp-tools (hokey):** For linting GPG keys (optional but recommended).
-- **pcsc-tools, ccid, libusb-compat (Linux):** System libraries for smart card interaction. `pcscd` daemon must be running.
-  - Debian/Ubuntu: `sudo apt install pcscd pcsc-tools libccid`
-  - Arch Linux: `sudo pacman -Syu pcsc-tools ccid`
-  - macOS: `pcsc-lite` is usually pre-installed or available via Homebrew.
+- **sops (Secrets OPerationS):** For managing encrypted files.
 
 ## Setup
 
@@ -57,16 +66,19 @@ The following command-line tools are required. They will be managed by Mise if y
 2.  **Install Tools with Mise:**
     If you have Mise installed, it should automatically prompt you to install the tools defined in `.mise.toml` when you `cd` into the directory (if you have `mise activate --hook` in your shell rc). Otherwise, run:
     ```bash
+    mise trust
     mise install
     ```
-    This ensures you are using the correct versions of all required CLI tools.
+    This ensures you are using the correct versions of required Mise-managed CLI tools.
 
 3.  **Configure Environment Variables (Optional but Recommended):**
-    Mise tasks can use environment variables for configuration. You can set these in your shell environment, or for project-specific settings, create a `.env` file in the project root (add `.env` to your `.gitignore`!). Mise will automatically load it.
+    Mise tasks can use environment variables for configuration. You can set these in your shell environment, or for project-specific settings, and Mise will automatically load it.
+
+    This project uses a Git tracked `.env.tracked` file in the project root with project defaults; as well as an optional `secrets/emv.sops.yaml` file for potentially sensitive variables that are intended to be encrypted via SOPS and thereafter allowed to be tracked in Git. 
 
     Example variables (see `.mise.toml` `[env]` section for more):
     ```sh
-    # .env (add to .gitignore!)
+    # .env
     GPG_USER_NAME="Your Name"
     GPG_USER_EMAIL="your.email@example.com"
     GPG_KEY_COMMENT="Optional Comment" # e.g., "Work Key" or "Personal Key"

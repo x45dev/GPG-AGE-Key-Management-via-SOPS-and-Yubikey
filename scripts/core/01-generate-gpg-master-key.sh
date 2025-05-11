@@ -10,14 +10,14 @@ SHELL_OPTIONS="set -e -u -o pipefail"
 # set -o pipefail: The return value of a pipeline is the status of the last command to exit with a non-zero status, or zero if no command exited with a non-zero status.
 eval "$SHELL_OPTIONS"
 
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LIB_SCRIPT_PATH="${BASE_DIR}/scripts/lib/common.sh"
 
 if [ ! -f "$LIB_SCRIPT_PATH" ]; then
     echo "Error: common.sh not found at $LIB_SCRIPT_PATH"
     exit 1
 fi
-# shellcheck source=scripts/lib/common.sh
+# shellcheck source=../lib/common.sh
 # Load common library functions (logging, prompts, etc.)
 source "$LIB_SCRIPT_PATH"
 
@@ -276,21 +276,46 @@ log_debug "Extracted MASTER_KEY_ID: ${MASTER_KEY_ID}"
 
 # --- Add Subkeys (Sign, Encrypt, Authenticate) ---
 log_info "Step 6: Adding Sign, Encrypt, and Authenticate Subkeys."
-SUBKEY_COMMANDS_STRING=""
-# Prepare GPG commands for adding subkeys based on the chosen GPG_KEY_TYPE.
-if [[ "${GPG_KEY_TYPE}" == "RSA4096" ]]; then
-    SUBKEY_COMMANDS_STRING="${GPG_PASSPHRASE}\naddkey\n4\n4096\n${GPG_EXPIRATION}\ny\naddkey\n6\n4096\n${GPG_EXPIRATION}\ny\naddkey\n5\n4096\n${GPG_EXPIRATION}\ny\nsave\n"
-elif [[ "${GPG_KEY_TYPE}" == "ED25519" ]]; then
-    SUBKEY_COMMANDS_STRING="${GPG_PASSPHRASE}\naddkey\n10\n${GPG_EXPIRATION}\ny\naddkey\n12\n${GPG_EXPIRATION}\ny\naddkey\n10\n${GPG_EXPIRATION}\ny\nsave\n"
-else
-    log_error "Unsupported GPG_KEY_TYPE: ${GPG_KEY_TYPE}. Cannot add subkeys."
-    exit 1
-fi
-log_debug "GPG subkey commands (passphrase redacted):\n$(printf "%s" "${SUBKEY_COMMANDS_STRING}" | sed '1s/.*/\[REDACTED PASSPHRASE]/')"
+
+# Construct the command sequence to be piped to gpg
+build_subkey_commands() {
+    printf "%s\n" "${GPG_PASSPHRASE}"
+    if [[ "${GPG_KEY_TYPE}" == "RSA4096" ]]; then
+        printf "addkey\n"
+        printf "4\n" # RSA (sign only)
+        printf "4096\n"
+        printf "%s\n" "${GPG_EXPIRATION}"
+        printf "y\n" # Confirm
+        printf "addkey\n"
+        printf "6\n" # RSA (encrypt only)
+        printf "4096\n"
+        printf "%s\n" "${GPG_EXPIRATION}"
+        printf "y\n" # Confirm
+        printf "addkey\n"
+        printf "5\n" # RSA (set your own capabilities) -> then choose A for Authenticate
+        printf "4096\n"
+        printf "%s\n" "${GPG_EXPIRATION}"
+        printf "y\n" # Confirm
+    elif [[ "${GPG_KEY_TYPE}" == "ED25519" ]]; then
+        printf "addkey\n"
+        printf "10\n" # ECC (sign only) -> EdDSA
+        printf "%s\n" "${GPG_EXPIRATION}"
+        printf "y\n" # Confirm
+        printf "addkey\n"
+        printf "12\n" # ECC (encrypt only) -> ECDH
+        printf "%s\n" "${GPG_EXPIRATION}"
+        printf "y\n" # Confirm
+        printf "addkey\n"
+        printf "10\n" # ECC (sign only) -> EdDSA again for Authentication capability
+        printf "%s\n" "${GPG_EXPIRATION}"
+        printf "y\n" # Confirm
+    fi
+    printf "save\n"
+}
 
 # Use --command-fd 0 to pipe commands to GPG.
 # --pinentry-mode loopback allows passphrase to be piped.
-GPG_EDIT_OUTPUT=$(printf "%s" "${SUBKEY_COMMANDS_STRING}" | gpg --no-tty --command-fd 0 --status-fd 1 --pinentry-mode loopback --expert --edit-key "${MASTER_KEY_ID}" 2>&1)
+GPG_EDIT_OUTPUT=$(build_subkey_commands | gpg --no-tty --command-fd 0 --status-fd 1 --pinentry-mode loopback --expert --edit-key "${MASTER_KEY_ID}" 2>&1)
 GPG_EDIT_EXIT_CODE=$?
 log_debug "gpg --edit-key for subkeys output (EC:${GPG_EDIT_EXIT_CODE}):\n${GPG_EDIT_OUTPUT}"
 if [ $GPG_EDIT_EXIT_CODE -ne 0 ] || ! echo "${GPG_EDIT_OUTPUT}" | grep -q "save"; then
