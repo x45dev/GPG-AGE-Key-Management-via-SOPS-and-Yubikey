@@ -72,7 +72,9 @@ MASTER_KEY_ID_FILE_PATH="${BASE_DIR}/${GPG_MASTER_KEY_ID_FILE}"
 # Initialize variables that will hold sensitive data or temporary file paths
 # These are cleared in the script_specific_cleanup function.
 GPG_BATCH_PARAMS_FILE="" # Initialize for cleanup
-GPG_PASSPHRASE=""
+GPG_REVOKE_INPUT_FILE_TEMP="" # For temporary revocation input
+GPG_PASSPHRASE_FILE_TEMP=""   # For temporary passphrase file for revocation
+GPG_PASSPHRASE=""        # This will hold the master key passphrase
 GPG_PASSPHRASE_CONFIRM=""
 
 log_debug "Resolved TEMP_GNUPGHOME: ${TEMP_GNUPGHOME}"
@@ -80,10 +82,13 @@ log_debug "Resolved MASTER_KEY_ID_FILE_PATH: ${MASTER_KEY_ID_FILE_PATH}"
 log_debug "GPG_KEY_TYPE: ${GPG_KEY_TYPE}, GPG_EXPIRATION: ${GPG_EXPIRATION}"
 log_debug "GPG_REVOCATION_REASON_CODE: ${GPG_REVOCATION_REASON_CODE}"
 
-# --- Prerequisite Checks ---
-check_command "gpg"
-check_command "mktemp"
+export PATH="${PATH}:$(gpgconf --list-dirs libexecdir)"
+
+# --- Prerequisite Checks---
 check_command "awk"
+check_command "gpg"
+check_command "gpg-preset-passphrase" # Though not used in the current flow, good to keep if strategy changes
+check_command "mktemp"
 check_command "sed"
 
 # --- Ensure User Details are Provided ---
@@ -108,6 +113,14 @@ script_specific_cleanup() {
     if [ -n "${GPG_BATCH_PARAMS_FILE:-}" ] && [ -f "${GPG_BATCH_PARAMS_FILE}" ]; then
         log_debug "Removing temporary GPG batch parameters file: ${GPG_BATCH_PARAMS_FILE}"
         shred -u "${GPG_BATCH_PARAMS_FILE}" 2>/dev/null || rm -f "${GPG_BATCH_PARAMS_FILE}"
+    fi
+    if [ -n "${GPG_REVOKE_INPUT_FILE_TEMP:-}" ] && [ -f "${GPG_REVOKE_INPUT_FILE_TEMP}" ]; then
+        log_debug "Removing temporary GPG revoke input file: ${GPG_REVOKE_INPUT_FILE_TEMP}"
+        shred -u "${GPG_REVOKE_INPUT_FILE_TEMP}" 2>/dev/null || rm -f "${GPG_REVOKE_INPUT_FILE_TEMP}"
+    fi
+    if [ -n "${GPG_PASSPHRASE_FILE_TEMP:-}" ] && [ -f "${GPG_PASSPHRASE_FILE_TEMP}" ]; then
+        log_debug "Removing temporary GPG passphrase file: ${GPG_PASSPHRASE_FILE_TEMP}"
+        shred -u "${GPG_PASSPHRASE_FILE_TEMP}" 2>/dev/null || rm -f "${GPG_PASSPHRASE_FILE_TEMP}"
     fi
     unset GPG_PASSPHRASE
     unset GPG_PASSPHRASE_CONFIRM
@@ -169,6 +182,24 @@ if ! chmod 700 "${TEMP_GNUPGHOME}"; then log_error "Failed to set permissions on
 # Export GNUPGHOME so subsequent GPG commands operate within this isolated environment.
 export GNUPGHOME="${TEMP_GNUPGHOME}"
 log_debug "Exported GNUPGHOME=${GNUPGHOME}"
+
+# Ensure gpg-agent in this temporary home allows loopback pinentry idempotently
+if ! mkdir -p "${GNUPGHOME}"; then log_error "Failed to ensure GPG home directory for gpg-agent.conf: ${GNUPGHOME}"; exit 1; fi
+GPG_AGENT_CONF_FILE="${GNUPGHOME}/gpg-agent.conf"
+PINENTRY_LOOPBACK_PATH="$(gpgconf --list-dirs libexecdir)/pinentry-loopback"
+
+if ! grep -q -F "allow-loopback-pinentry" "${GPG_AGENT_CONF_FILE}" 2>/dev/null; then
+    echo "allow-loopback-pinentry" >> "${GPG_AGENT_CONF_FILE}"
+    log_debug "Added 'allow-loopback-pinentry' to ${GPG_AGENT_CONF_FILE}"
+else
+    log_debug "'allow-loopback-pinentry' already present in ${GPG_AGENT_CONF_FILE}"
+fi
+if ! grep -q -F "pinentry-program ${PINENTRY_LOOPBACK_PATH}" "${GPG_AGENT_CONF_FILE}" 2>/dev/null; then
+    echo "pinentry-program ${PINENTRY_LOOPBACK_PATH}" >> "${GPG_AGENT_CONF_FILE}"
+    log_debug "Added 'pinentry-program ${PINENTRY_LOOPBACK_PATH}' to ${GPG_AGENT_CONF_FILE}"
+else
+    log_debug "'pinentry-program ${PINENTRY_LOOPBACK_PATH}' already present in ${GPG_AGENT_CONF_FILE}"
+fi
 
 # Check if a master key ID file already exists, indicating a previous run.
 if [ -f "${MASTER_KEY_ID_FILE_PATH}" ]; then
@@ -277,48 +308,56 @@ log_debug "Extracted MASTER_KEY_ID: ${MASTER_KEY_ID}"
 # --- Add Subkeys (Sign, Encrypt, Authenticate) ---
 log_info "Step 6: Adding Sign, Encrypt, and Authenticate Subkeys."
 
-# Construct the command sequence to be piped to gpg
+# Construct the command sequence for GPG --edit-key
 build_subkey_commands() {
-    printf "%s\n" "${GPG_PASSPHRASE}"
+    local output_command_file="$1" # Function now only takes the output file path
+
+    # Passphrase is NO LONGER written by this function.
+    # It will be supplied via --passphrase argument to gpg --edit-key.
+
     if [[ "${GPG_KEY_TYPE}" == "RSA4096" ]]; then
-        printf "addkey\n"
-        printf "4\n" # RSA (sign only)
-        printf "4096\n"
-        printf "%s\n" "${GPG_EXPIRATION}"
-        printf "y\n" # Confirm
-        printf "addkey\n"
-        printf "6\n" # RSA (encrypt only)
-        printf "4096\n"
-        printf "%s\n" "${GPG_EXPIRATION}"
-        printf "y\n" # Confirm
-        printf "addkey\n"
-        printf "5\n" # RSA (set your own capabilities) -> then choose A for Authenticate
-        printf "4096\n"
-        printf "%s\n" "${GPG_EXPIRATION}"
-        printf "y\n" # Confirm
+        # All commands for RSA4096, overwrite/create the command file
+        printf "%s\n" \
+            "addkey" "4" "4096" "${GPG_EXPIRATION}" "y" \
+            "addkey" "6" "4096" "${GPG_EXPIRATION}" "y" \
+            "addkey" "8" "S" "E" "A" "Q" "4096" "${GPG_EXPIRATION}" "y" \
+            "save" \
+            > "${output_command_file}"
     elif [[ "${GPG_KEY_TYPE}" == "ED25519" ]]; then
-        printf "addkey\n"
-        printf "10\n" # ECC (sign only) -> EdDSA
-        printf "%s\n" "${GPG_EXPIRATION}"
-        printf "y\n" # Confirm
-        printf "addkey\n"
-        printf "12\n" # ECC (encrypt only) -> ECDH
-        printf "%s\n" "${GPG_EXPIRATION}"
-        printf "y\n" # Confirm
-        printf "addkey\n"
-        printf "10\n" # ECC (sign only) -> EdDSA again for Authentication capability
-        printf "%s\n" "${GPG_EXPIRATION}"
-        printf "y\n" # Confirm
+        # All commands for ED25519, overwrite/create the command file
+        printf "%s\n" \
+            "addkey" "10" "${GPG_EXPIRATION}" "y" \
+            "addkey" "12" "${GPG_EXPIRATION}" "y" \
+            "addkey" "11" "S" "E" "A" "Q" "${GPG_EXPIRATION}" "y" \
+            "save" \
+            > "${output_command_file}"
     fi
-    printf "save\n"
 }
 
-# Use --command-fd 0 to pipe commands to GPG.
-# --pinentry-mode loopback allows passphrase to be piped.
-GPG_EDIT_OUTPUT=$(build_subkey_commands | gpg --no-tty --command-fd 0 --status-fd 1 --pinentry-mode loopback --expert --edit-key "${MASTER_KEY_ID}" 2>&1)
+log_info "Attempting to execute GPG subkey addition..."
+
+# Create a temporary file for subkey commands
+GPG_SUBKEY_CMDS_FILE=$(mktemp "${TEMP_GNUPGHOME}/gpg_subkey_cmds.XXXXXX")
+if [ -z "$GPG_SUBKEY_CMDS_FILE" ] || [ ! -f "$GPG_SUBKEY_CMDS_FILE" ]; then
+    log_error "Failed to create temp file for GPG subkey commands."
+    exit 1
+fi
+chmod 600 "${GPG_SUBKEY_CMDS_FILE}"
+
+build_subkey_commands "${GPG_SUBKEY_CMDS_FILE}"
+log_debug "GPG subkey commands written to ${GPG_SUBKEY_CMDS_FILE}:\n$(cat "${GPG_SUBKEY_CMDS_FILE}")"
+
+set +e +o pipefail # Temporarily disable exit on error and pipefail for debugging this line
+GPG_EDIT_OUTPUT=$(gpg --no-tty --verbose --debug-level guru --batch --status-fd 1 --pinentry-mode loopback --passphrase "${GPG_PASSPHRASE}" --command-file "${GPG_SUBKEY_CMDS_FILE}" --expert --edit-key "${MASTER_KEY_ID}" 2>&1)
 GPG_EDIT_EXIT_CODE=$?
+set -e -o pipefail # Re-enable exit on error and pipefail
+log_info "GPG subkey addition command finished. EC: ${GPG_EDIT_EXIT_CODE}"
+
+shred -u "${GPG_SUBKEY_CMDS_FILE}" 2>/dev/null || rm -f "${GPG_SUBKEY_CMDS_FILE}"; GPG_SUBKEY_CMDS_FILE=""
+
 log_debug "gpg --edit-key for subkeys output (EC:${GPG_EDIT_EXIT_CODE}):\n${GPG_EDIT_OUTPUT}"
-if [ $GPG_EDIT_EXIT_CODE -ne 0 ] || ! echo "${GPG_EDIT_OUTPUT}" | grep -q "save"; then
+# Check for GPG exit code and the creation of 3 subkeys.
+if [ $GPG_EDIT_EXIT_CODE -ne 0 ] || ! echo "${GPG_EDIT_OUTPUT}" | grep -c "\[GNUPG:\] KEY_CREATED S" | grep -q "3"; then
     log_error "Failed to add GPG subkeys. GPG Exit Code: $GPG_EDIT_EXIT_CODE"
     log_error "GPG Edit Output:\n${GPG_EDIT_OUTPUT}"
     gpg --no-tty --list-secret-keys "${MASTER_KEY_ID}"
@@ -341,19 +380,65 @@ if [[ "$GPG_REVOCATION_REASON_CODE" == "0" ]]; then
     log_debug "Revocation reason text (for code 0): '${REVOCATION_REASON_TEXT}'"
 fi
 
-# Construct the input for gpg --gen-revoke
-# This includes the passphrase, reason code, optional text, and confirmations.
-GPG_REVOKE_INPUT_STRING="${GPG_PASSPHRASE}\n${GPG_REVOCATION_REASON_CODE}\n${REVOCATION_REASON_TEXT}\ny\ny\n"
-log_debug "GPG revoke input (passphrase redacted):\n$(printf "%s" "${GPG_REVOKE_INPUT_STRING}" | sed '1s/.*/\[REDACTED PASSPHRASE]/')"
-GPG_REVOKE_OUTPUT=$(printf "%s" "${GPG_REVOKE_INPUT_STRING}" | gpg --no-tty --command-fd 0 --status-fd 1 --pinentry-mode loopback --output "${REVOCATION_CERT_FILE}" --gen-revoke "${MASTER_KEY_ID}" 2>&1)
+# Create a temporary file for revocation prompts (reason, description, y, y)
+GPG_REVOKE_INPUT_FILE_TEMP=$(mktemp "${TEMP_GNUPGHOME}/gpg_revoke_input.XXXXXX")
+if [ -z "$GPG_REVOKE_INPUT_FILE_TEMP" ] || [ ! -f "$GPG_REVOKE_INPUT_FILE_TEMP" ]; then
+    log_error "Failed to create temp file for GPG revoke input."
+    exit 1
+fi
+chmod 600 "${GPG_REVOKE_INPUT_FILE_TEMP}"
+# Write passphrase, reason code, description, and two 'y' confirmations to the file.
+printf "%s\n%s\n%s\ny\ny\n" \
+    "${GPG_PASSPHRASE}" \
+    "${GPG_REVOCATION_REASON_CODE}" \
+    "${REVOCATION_REASON_TEXT}" \
+    > "${GPG_REVOKE_INPUT_FILE_TEMP}"
+log_debug "GPG revoke input file created at ${GPG_REVOKE_INPUT_FILE_TEMP} (passphrase redacted):\n$(sed '1s/.*/\[REDACTED PASSPHRASE]/' "${GPG_REVOKE_INPUT_FILE_TEMP}")"
+
+# Variable to hold the output of the gpg --gen-revoke command
+gpg_revoke_cmd_output_val=""
+GPG_REVOKE_EXIT_CODE=0 # Initialize
+
+# Kill and reload gpg-agent to flush any cached passphrases that might interfere.
+log_debug "Attempting to kill and reload gpg-agent to flush passphrase cache."
+
+set +e # Temporarily disable exit on error for these specific commands
+KILL_AGENT_OUTPUT=$(gpgconf --kill gpg-agent 2>&1); KILL_AGENT_EC=$?
+log_debug "gpgconf --kill gpg-agent output (EC: ${KILL_AGENT_EC}):\n${KILL_AGENT_OUTPUT}"
+if [ $KILL_AGENT_EC -ne 0 ]; then log_warn "gpgconf --kill gpg-agent reported an error (EC: $KILL_AGENT_EC). Continuing..."; fi
+
+RELOAD_AGENT_OUTPUT=$(gpgconf --reload gpg-agent 2>&1); RELOAD_AGENT_EC=$?
+log_debug "gpgconf --reload gpg-agent output (EC: ${RELOAD_AGENT_EC}):\n${RELOAD_AGENT_OUTPUT}"
+if [ $RELOAD_AGENT_EC -ne 0 ]; then log_warn "gpgconf --reload gpg-agent reported an error (EC: $RELOAD_AGENT_EC). Continuing..."; fi
+set -e # Re-enable exit on error
+
+sleep 1 # Give agent a moment
+
+# Pre-check: Ensure the secret key is available before attempting revocation.
+if ! gpg --no-tty --list-secret-keys "${MASTER_KEY_ID}" >/dev/null 2>&1; then
+    log_error "Cannot generate revocation certificate: Secret key not found for ID ${MASTER_KEY_ID} in GNUPGHOME=${GNUPGHOME:-default}."
+    exit 1
+fi
+
+# Generate revocation certificate using --pinentry-mode loopback and providing all input via stdin.
+# Removed --no-tty, --batch, --yes, --passphrase-file, --command-file.
+set +e # Temporarily disable exit on error to capture gpg output even on failure
+gpg_revoke_cmd_output_val=$(gpg --verbose --debug-level guru --status-fd 1 \
+    --pinentry-mode loopback \
+    --output "${REVOCATION_CERT_FILE}" \
+    --gen-revoke "${MASTER_KEY_ID}" < "${GPG_REVOKE_INPUT_FILE_TEMP}" 2>&1)
 GPG_REVOKE_EXIT_CODE=$?
-log_debug "gpg --gen-revoke output (EC:${GPG_REVOKE_EXIT_CODE}):\n${GPG_REVOKE_OUTPUT}"
+set -e # Re-enable exit on error
+
+shred -u "${GPG_REVOKE_INPUT_FILE_TEMP}" 2>/dev/null || rm -f "${GPG_REVOKE_INPUT_FILE_TEMP}"; GPG_REVOKE_INPUT_FILE_TEMP=""
+
+log_debug "gpg --gen-revoke output (EC:${GPG_REVOKE_EXIT_CODE}):\n${gpg_revoke_cmd_output_val}"
 unset GPG_PASSPHRASE # Unset passphrase from script memory immediately after use.
 
 
 if [ $GPG_REVOKE_EXIT_CODE -ne 0 ] || [ ! -s "${REVOCATION_CERT_FILE}" ]; then
     log_error "Failed to generate revocation certificate. GPG Exit Code: $GPG_REVOKE_EXIT_CODE"
-    log_error "GPG Revoke Output:\n${GPG_REVOKE_OUTPUT}"
+    log_error "GPG Revoke Output:\n${gpg_revoke_cmd_output_val}"
     [ -f "${REVOCATION_CERT_FILE}" ] && rm -f "${REVOCATION_CERT_FILE}"
     exit 1
 fi
