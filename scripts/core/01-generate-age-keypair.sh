@@ -53,7 +53,8 @@ AGE_SOFTWARE_KEY_DIR="${AGE_SOFTWARE_KEY_DIR:-keys}" # Relative to project root
 # Filename for the (initially plaintext, then encrypted) private key.
 AGE_SOFTWARE_KEY_FILENAME="${AGE_SOFTWARE_KEY_FILENAME:-age-keys-primary.txt}"
 # Recommended minimum passphrase length for encrypting the private key.
-AGE_SOFTWARE_KEY_MIN_PASSPHRASE_LENGTH="${AGE_SOFTWARE_KEY_MIN_PASSPHRASE_LENGTH:-12}"
+# This is now informational as 'age' handles its own prompting and validation.
+# AGE_SOFTWARE_KEY_MIN_PASSPHRASE_LENGTH="${AGE_SOFTWARE_KEY_MIN_PASSPHRASE_LENGTH:-12}"
 
 # Resolve full paths for key storage.
 KEY_DIR_PATH="${BASE_DIR}/${AGE_SOFTWARE_KEY_DIR}"
@@ -61,6 +62,7 @@ PLAINTEXT_KEY_FILE="${KEY_DIR_PATH}/${AGE_SOFTWARE_KEY_FILENAME}"
 ENCRYPTED_KEY_FILE="${PLAINTEXT_KEY_FILE}.age" # Convention for AGE encrypted file
 
 # Variables to temporarily hold the passphrase for encrypting the AGE key.
+# These are no longer used by the script for prompting but kept for cleanup consistency.
 AGE_PASSPHRASE=""
 AGE_PASSPHRASE_CONFIRM=""
 
@@ -69,6 +71,7 @@ AGE_PASSPHRASE_CONFIRM=""
 script_specific_cleanup() {
     local exit_status_for_cleanup=${1:-$?}
     log_debug "Running script_specific_cleanup for 01-generate-age-keypair.sh with status $exit_status_for_cleanup"
+    # Unset sensitive variables (though not directly used for prompting anymore)
     unset AGE_PASSPHRASE
     unset AGE_PASSPHRASE_CONFIRM
     # If script failed AND the encrypted key file was not created, remove the plaintext key if it exists
@@ -144,40 +147,21 @@ log_warn "IMPORTANT: Add this public key to your .sops.yaml 'age:' recipients li
 # --- Encrypt Private Key ---
 # The plaintext private key is encrypted using AGE's passphrase-based encryption.
 log_info "Step 4: Encrypting the Private Key with a Passphrase."
-log_warn "You will now set a passphrase to encrypt the AGE private key file ('${PLAINTEXT_KEY_FILE}')."
-log_warn "This passphrase will be required to decrypt and use this software AGE key."
-log_warn "Choose a strong, unique passphrase and store it securely."
+log_info "You will now be prompted by the 'age' tool to enter a passphrase for encrypting the private key."
+log_warn "This passphrase is CRITICAL. If lost, you will NOT be able to decrypt the AGE key file."
+log_warn "Store this passphrase securely and separately from the encrypted key file."
+log_info "The 'age' tool will handle the passphrase entry directly."
 
-# Loop until a valid passphrase (meeting length or user override) and confirmation match.
-while true; do
-    get_secure_input "Enter passphrase to encrypt the AGE private key (min ${AGE_SOFTWARE_KEY_MIN_PASSPHRASE_LENGTH} chars recommended): " AGE_PASSPHRASE
-    if [ "${#AGE_PASSPHRASE}" -lt "${AGE_SOFTWARE_KEY_MIN_PASSPHRASE_LENGTH}" ]; then
-        log_warn "Passphrase is less than ${AGE_SOFTWARE_KEY_MIN_PASSPHRASE_LENGTH} characters. This is not recommended."
-        if ! confirm "Are you sure you want to continue with this shorter passphrase?"; then AGE_PASSPHRASE=""; continue; fi
-    fi
-    if [ -z "$AGE_PASSPHRASE" ]; then log_warn "Passphrase cannot be empty."; continue; fi
-    get_secure_input "Confirm passphrase: " AGE_PASSPHRASE_CONFIRM
-    if [ "$AGE_PASSPHRASE" == "$AGE_PASSPHRASE_CONFIRM" ]; then break;
-    else log_warn "Passphrases do not match. Please try again."; fi
-done
-unset AGE_PASSPHRASE_CONFIRM
-log_success "Passphrase for AGE key encryption accepted."
-
+# Encrypt the private key file using age
 log_info "Encrypting '${PLAINTEXT_KEY_FILE}' to '${ENCRYPTED_KEY_FILE}'..."
-# `age --passphrase --armor -o <output> <input>` encrypts <input> to <output> using a passphrase.
-# `--armor` ensures ASCII output. Passphrase is piped to `age`.
-AGE_ENCRYPT_OUTPUT=$(printf "%s" "${AGE_PASSPHRASE}" | age --passphrase --armor -o "${ENCRYPTED_KEY_FILE}" "${PLAINTEXT_KEY_FILE}" 2>&1)
-AGE_ENCRYPT_EC=$?
-# Unset passphrase from script memory immediately after use.
-unset AGE_PASSPHRASE
-
-if [ $AGE_ENCRYPT_EC -ne 0 ] || [ ! -s "${ENCRYPTED_KEY_FILE}" ]; then
-    log_error "Failed to encrypt AGE private key. age Exit Code: $AGE_ENCRYPT_EC"
-    log_error "age Output:\n${AGE_ENCRYPT_OUTPUT}"
-    [ -f "${ENCRYPTED_KEY_FILE}" ] && rm -f "${ENCRYPTED_KEY_FILE}" # Clean up partial file
-    log_warn "The plaintext key file '${PLAINTEXT_KEY_FILE}' still exists. Please handle it securely or attempt encryption again."
+# `age -p -o <output> <input>` encrypts <input> to <output> using a passphrase prompted by age.
+# `--armor` is default for passphrase encryption.
+if ! AGE_ENCRYPT_OUTPUT=$(age -p -o "${ENCRYPTED_KEY_FILE}" "${PLAINTEXT_KEY_FILE}" 2>&1); then
+    log_error "Failed to encrypt AGE private key. AGE EC: $?"
+    log_error "AGE Output:\n${AGE_ENCRYPT_OUTPUT}"
     exit 1
 fi
+
 log_success "AGE private key encrypted and saved to: ${ENCRYPTED_KEY_FILE}"
 
 # --- Securely Delete Plaintext Private Key ---
@@ -202,7 +186,7 @@ log_info "Summary:"
 log_info "  - Public Key: ${PUBLIC_KEY}"
 log_info "  - Encrypted Private Key File: ${ENCRYPTED_KEY_FILE}"
 log_warn "Next Steps:"
-log_warn "  1. VERY IMPORTANT: Remember the passphrase you set for encrypting the AGE private key. It has been unset from script memory."
+log_warn "  1. VERY IMPORTANT: Remember the passphrase you entered when prompted by 'age' to encrypt the private key."
 log_warn "  2. Securely back up the encrypted private key file ('${ENCRYPTED_KEY_FILE}')."
 log_warn "  3. If using with SOPS, add the public key ('${PUBLIC_KEY}') to your '.sops.yaml'."
 log_warn "  4. Set the SOPS_AGE_KEY_FILE environment variable to point to the encrypted private key file ('${ENCRYPTED_KEY_FILE}')."
